@@ -10,7 +10,8 @@ namespace frost {
     http_server::http_server(uint16_t port)
         : _state(state::IDLE),
           _port(port),
-          _listenfd(-1) {
+          _listenfd(-1),
+          _active_connections(0) {
     }
 
     http_server::~http_server() {
@@ -42,8 +43,9 @@ namespace frost {
     }
 
     void http_server::stop() {
-        if (_listenfd >= 0) {
+        if (_listenfd > -1) {
             ::close(_listenfd);
+            _listenfd = -1;
         }
         _accept_w.stop();
         stop_signal_watchers();
@@ -113,14 +115,11 @@ namespace frost {
         socklen_t client_len = sizeof(client_addr);
 
         int client_fd = ::accept(w.fd, (struct sockaddr *) &client_addr, &client_len);
-
         if (client_fd < 0) {
             perror("Accept error");
             return;
         }
-//        static int i = 0;
-//        std::cout << "Accepted. fd = " << client_fd << std::endl;
-//        std::cout << "i = " << ++i << std::endl;
+        ++_active_connections;
         ::close(client_fd);
     }
 

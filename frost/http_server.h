@@ -27,6 +27,7 @@ namespace frost {
 
         uint16_t get_port() const;
         state get_state() const;
+        uint32_t get_active_connections() const;
 
         void on(const char* path, const cb_t& cb);
         void on(const std::string& path, const cb_t& cb);
@@ -47,7 +48,6 @@ namespace frost {
         bool has_signal_watcher(int sig);
 
     private:
-
         state _state;
         uint16_t _port;
         std::unordered_map<std::string, cb_t> _paths;
@@ -57,6 +57,8 @@ namespace frost {
         int _listenfd;
         ev::default_loop _loop;
         ev::io _accept_w;
+
+        uint32_t _active_connections;
     };
 
 
@@ -66,6 +68,10 @@ namespace frost {
 
     inline state http_server::get_state() const {
         return _state;
+    }
+
+    inline uint32_t http_server::get_active_connections() const {
+        return _active_connections;
     }
 
     inline void http_server::on(const char* path, const http_server::cb_t& cb) {
