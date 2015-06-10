@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$USER_HOME$/Projects/cpp/frost/.idea/http-server2.iml" filepath="$USER_HOME$/Projects/cpp/frost/.idea/http-server2.iml" />
+      <module fileurl="file://$USER_HOME$/Projects/cpp/frost/.idea/frost.iml" filepath="$USER_HOME$/Projects/cpp/frost/.idea/frost.iml" />
     </modules>
   </component>
 </project>

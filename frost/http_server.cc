@@ -3,7 +3,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <iostream>
+#include <stddef.h>
 #include "http_server.h"
+
+#define SELF(w, type, f) (type*) ( (char *) &(w) - offsetof(type, f))
 
 namespace frost {
 
@@ -120,30 +123,112 @@ namespace frost {
             return;
         }
         ++_active_connections;
-        http_request* req = new http_request(_loop, client_fd, _router);
-        req->set_cb(std::bind(&http_server::request_cb, this, std::placeholders::_1));
+//        std::cout << _active_connections << "a" << std::endl;
+        http_request* req = new http_request(client_fd);
+        req->_rw.set<http_server, &http_server::read_cb>(this);
+        req->_tw.set<http_server, &http_server::read_timeout_cb>(this);
         req->start();
     }
 
-    void http_server::request_cb(http_request* req) {
-        // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
-        http_response* resp = new http_response(_loop, req->_client_fd, req);
-        resp->set_cb(std::bind(&http_server::response_cb, this, std::placeholders::_1, std::placeholders::_2));
-        resp->start();
-//        auto cb = _router.get_route(req->path());
-        auto cb = _router.get_route("/");
-        if (cb == nullptr) {
-            // TODO: 404
+    void http_server::read_cb(ev::io& w, int revents) {
+        if (ev::ERROR & revents) {
+            perror("got invalid event");
+            return;
+        }
+        auto req = SELF(w, http_request, _rw);
+        req->_tw.stop();
+
+        ssize_t nread = ::recv(w.fd, req->_rbuf + req->_ruse, req->_rlen - req->_ruse, 0);
+        if (nread > 0) {
+            req->_ruse += nread;
+
+            auto p = req->parse();
+            switch (p) {
+                case parse_result::NEED_MORE: {
+                    if (req->_ruse >= req->_rlen) {
+                        // TODO: somehow react to buffer exceeding
+                        // TODO: respond with 413 Request Entity Too Large
+                        // errno = ENOBUFS;
+                        // perror("buffer exceeded");
+                    } else {
+                        req->_tw.again();
+                    }
+                    return;
+                }
+                case parse_result::GOOD: {
+//                    printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
+                    w.stop();
+                    // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
+                    http_response* resp = new http_response(req->_client_fd, req);
+                    resp->_ww.set<http_server, &http_server::write_cb>(this);
+                    resp->_tw.set<http_server, &http_server::write_timeout_cb>(this);
+                    resp->start();
+                    auto cb = _router.get_route("/");
+                    if (cb == nullptr) {
+                        // TODO: 404
+                    } else {
+                        // TODO: check if method is allowed
+                        (*cb)(req, resp);
+                    }
+
+                    return;
+                }
+                case parse_result::BAD: {
+                    // TODO: respond in bad request
+                    return;
+                }
+            }
+
+        } else if (nread < 0) {
+            perror("read error");
+
+            switch (errno) {
+                case EAGAIN:
+                    break;
+                case EINTR:
+                    break;
+                default:
+                    break;
+            }
+
+            return;
         } else {
-            // TODO: check if method is allowed
-            (*cb)(req, resp);
+            // perror("EOF");
+            delete req;
         }
     }
 
-    void http_server::response_cb(http_request* req, http_response* resp) {
-        delete resp;
-        delete req;
-        --_active_connections;
+    void http_server::write_cb(ev::io& w, int revents) {
+        if (ev::ERROR & revents) {
+            perror("got invalid event");
+            return;
+        }
+        auto resp = SELF(w, http_response, _ww);
+        http_request* req = resp->_req;
+        resp->_tw.stop(); // TODO: start again if we wrote not everything
+
+        char msg[] = "HTTP/1.1 200 OK\r\nContent-Length: 18\r\n\r\nHello from server!";
+        size_t s = strlen(msg);
+
+        ssize_t written = ::send(w.fd, msg, s, 0);
+//        std::cout << "written: " << written << ". s: " << s << std::endl;
+        if (written < 0) {
+            perror("write error");
+            return;
+        }
+        if (written == s) {
+            delete resp;
+            delete req;
+            --_active_connections;
+        }
+    }
+
+    void http_server::read_timeout_cb(ev::timer& w, int revents) {
+
+    }
+
+    void http_server::write_timeout_cb(ev::timer& w, int revents) {
+
     }
 
     void http_server::start_signal_watchers() {

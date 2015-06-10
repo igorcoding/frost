@@ -29,9 +29,9 @@ namespace frost {
         state get_state() const;
         uint32_t get_active_connections() const;
 
-        void on(const char* path, const cb_t& cb);
-        void on(const std::string& path, const cb_t& cb);
-        void on_signal(int sig, const signal_cb_t& cb);
+        void on(const char* path, cb_t&& cb);
+        void on(const std::string& path, cb_t&& cb);
+        void on_signal(int sig, signal_cb_t&& cb);
 
         int start();
         void stop();
@@ -40,8 +40,11 @@ namespace frost {
         int start_listen();
         void signal_cb(ev::sig& w, int revents);
         void accept_cb(ev::io& w, int revents);
-        void request_cb(http_request* req);
-        void response_cb(http_request* req, http_response* resp);
+        void read_cb(ev::io& w, int revents);
+        void write_cb(ev::io& w, int revents);
+
+        void read_timeout_cb(ev::timer& w, int revents);
+        void write_timeout_cb(ev::timer& w, int revents);
 
         void start_signal_watchers();
         void stop_signal_watchers();
@@ -76,16 +79,16 @@ namespace frost {
         return _active_connections;
     }
 
-    inline void http_server::on(const char* path, const cb_t& cb) {
-        _router.add_route(path, cb);
+    inline void http_server::on(const char* path, cb_t&& cb) {
+        _router.add_route(path, std::move(cb));
     }
 
-    inline void http_server::on(const std::string& path, const cb_t& cb) {
-        _router.add_route(path, cb);
+    inline void http_server::on(const std::string& path, cb_t&& cb) {
+        _router.add_route(path, std::move(cb));
     }
 
-    inline void http_server::on_signal(int sig, const signal_cb_t& cb) {
-        _signals_cb[sig] = cb;
+    inline void http_server::on_signal(int sig, signal_cb_t&& cb) {
+        _signals_cb[sig] = std::move(cb);
         ev::sig* w = new ev::sig;
         w->set(sig);
         w->set<http_server, &http_server::signal_cb>(this);

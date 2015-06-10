@@ -48,9 +48,8 @@ namespace frost {
 
     class http_request {
         friend class http_server;
-        typedef std::function<void(http_request*)> req_cb_t;
     public:
-        http_request(ev::default_loop& loop, int client_fd, const path_router_t& router);
+        http_request(int client_fd);
         ~http_request();
 
         const http_method& method() const;
@@ -60,24 +59,21 @@ namespace frost {
         const char* body() const;
         uint32_t body_size() const;
 
+        static void set_max_buffer_size(uint32_t max_buffer);
+
     private:
-        void read_cb(ev::io& w, int revents);
         void start();
-        void set_cb(req_cb_t&& cb);
         void stop();
         parse_result parse();
 
     private:
-        ev::default_loop& _loop;
         ev::io _rw;
+        ev::timer _tw;
         int _client_fd;
         char* _rbuf;
         uint32_t _ruse;
         char* _rbuf_ptr;
-        static constexpr uint32_t BUF_SIZE = 4096;
-
-        req_cb_t _cb;
-        bool _has_cb;
+        static uint32_t _rlen;
 
         parse_result _parse_result;
         http_method _method;
@@ -86,10 +82,7 @@ namespace frost {
         std::vector<header> _headers;
         char* _body_ptr;
         uint32_t _body_size;
-
-        const path_router_t& _router;
     };
-
 
 
     inline const http_method& http_request::method() const {
