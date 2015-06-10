@@ -3,6 +3,7 @@
 
 #include "http_request.h"
 #include "http_response.h"
+#include "router.h"
 
 #include <stdint.h>
 #include <functional>
@@ -17,7 +18,6 @@ namespace frost {
     };
 
     class http_server {
-        typedef std::function<void(http_request*, http_response* resp)> cb_t;
         typedef std::function<void()> signal_cb_t;
     public:
         static constexpr int BACKLOG_SIZE = 5;
@@ -40,6 +40,8 @@ namespace frost {
         int start_listen();
         void signal_cb(ev::sig& w, int revents);
         void accept_cb(ev::io& w, int revents);
+        void request_cb(http_request* req);
+        void response_cb(http_request* req, http_response* resp);
 
         void start_signal_watchers();
         void stop_signal_watchers();
@@ -50,7 +52,7 @@ namespace frost {
     private:
         state _state;
         uint16_t _port;
-        std::unordered_map<std::string, cb_t> _paths;
+        path_router_t _router;
         std::unordered_map<int, signal_cb_t> _signals_cb;
 
         std::unordered_map<int, ev::sig*> _signals;
@@ -74,12 +76,12 @@ namespace frost {
         return _active_connections;
     }
 
-    inline void http_server::on(const char* path, const http_server::cb_t& cb) {
-        _paths[path] = cb;
+    inline void http_server::on(const char* path, const cb_t& cb) {
+        _router.add_route(path, cb);
     }
 
-    inline void http_server::on(const std::string& path, const http_server::cb_t& cb) {
-        _paths[path] = cb;
+    inline void http_server::on(const std::string& path, const cb_t& cb) {
+        _router.add_route(path, cb);
     }
 
     inline void http_server::on_signal(int sig, const signal_cb_t& cb) {

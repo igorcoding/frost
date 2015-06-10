@@ -120,7 +120,30 @@ namespace frost {
             return;
         }
         ++_active_connections;
-        ::close(client_fd);
+        http_request* req = new http_request(_loop, client_fd, _router);
+        req->set_cb(std::bind(&http_server::request_cb, this, std::placeholders::_1));
+        req->start();
+    }
+
+    void http_server::request_cb(http_request* req) {
+        // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
+        http_response* resp = new http_response(_loop, req->_client_fd, req);
+        resp->set_cb(std::bind(&http_server::response_cb, this, std::placeholders::_1, std::placeholders::_2));
+        resp->start();
+//        auto cb = _router.get_route(req->path());
+        auto cb = _router.get_route("/");
+        if (cb == nullptr) {
+            // TODO: 404
+        } else {
+            // TODO: check if method is allowed
+            (*cb)(req, resp);
+        }
+    }
+
+    void http_server::response_cb(http_request* req, http_response* resp) {
+        delete resp;
+        delete req;
+        --_active_connections;
     }
 
     void http_server::start_signal_watchers() {

@@ -12,6 +12,7 @@ set(SOURCE_FILES
                  http_request.cc
                  http_response.h
                  http_response.cc
+                 router.h
 
                  )
 add_library(frost ${SOURCE_FILES})

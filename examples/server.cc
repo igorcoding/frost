@@ -26,8 +26,10 @@ void on_request(frost::http_request* req, frost::http_response* resp) {
 int main() {
     cout << "Hello, World!" << endl;
     frost::http_server* server = new frost::http_server(8000);
-    server->on("/some/sneaky/path", [](frost::http_request* req, frost::http_response* resp) {
-
+    server->on("/", [](frost::http_request* req, frost::http_response* resp) {
+//        std::cout << "hello!!!" << std::endl;
+//        delete req;
+//        delete resp; // TODO: this is not correct
     });
 
     server->on_signal(SIGINT, [server]() {
