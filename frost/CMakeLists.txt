@@ -4,7 +4,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
-include_directories(include/)
+include_directories(.)
 set(SOURCE_FILES
                  http_server.h
                  http_server.cc
@@ -13,7 +13,10 @@ set(SOURCE_FILES
                  http_response.h
                  http_response.cc
                  router.h
-                 util.h
+                 util/util.h
+                 util/mapper.h
+                 http/status.h
+                 http/status.cc
 
                  )
 add_library(frost ${SOURCE_FILES})

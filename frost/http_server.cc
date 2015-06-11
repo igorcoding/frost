@@ -152,7 +152,7 @@ namespace frost {
                 }
                 case parse_result::GOOD: {
                     // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
-                    w.stop();
+//                    w.stop();
                     // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
                     auto resp = create_response(req);
                     // auto cb = _router.get_route(req->path());
@@ -186,6 +186,7 @@ namespace frost {
 
             return;
         } else {
+            --_active_connections;
             // perror("EOF");
             delete req;
         }

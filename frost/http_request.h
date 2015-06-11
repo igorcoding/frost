@@ -2,6 +2,7 @@
 #define FROST_HTTP_REQUEST_H
 
 #include "router.h"
+#include "util/util.h"
 
 #include <ev++.h>
 #include <vector>
@@ -23,26 +24,6 @@ namespace frost {
         DELETE,
         TRACE,
         CONNECT
-    };
-
-    struct http_version {
-        int major_ver;
-        int minor_ver;
-
-        http_version(int major_ver, int minor_ver)
-            : major_ver(major_ver),
-              minor_ver(minor_ver)
-        { }
-    };
-
-    struct header {
-        std::string name;
-        std::string value;
-
-        header(const std::string& name, const std::string& value)
-            : name(name),
-              value(value)
-        { }
     };
 
 

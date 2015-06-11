@@ -4,20 +4,33 @@
 #include <sys/uio.h>
 #include <ev++.h>
 #include <functional>
+#include <unordered_map>
+
+#include "util/util.h"
+#include "http/status.h"
 
 namespace frost {
-    class http_request;
 
+
+
+
+    class http_request;
     class http_response {
         friend class http_server;
     public:
+        static http_version DEFAULT_VERSION;
+
         http_response(int& client_fd, http_request* req);
         ~http_response();
 
         bool finished();
 
-        void write(const char* buf, size_t len);
+        void send(const char* buf, size_t len);
+        void send_status(status_code code);
+        void send_status(status_code code, const http_version& version);
         void finish();
+
+        void send(status_code code, const char* body, size_t body_len);
     private:
         void start();
 

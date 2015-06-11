@@ -3,9 +3,10 @@
 #include <sys/socket.h>
 #include <iostream>
 #include "http_response.h"
-#include "util.h"
 
 namespace frost {
+
+    http_version http_response::DEFAULT_VERSION = {1, 1};
 
     http_response::http_response(int& client_fd, http_request* req)
         : _ww(),
@@ -29,7 +30,7 @@ namespace frost {
         free(_wbuf);
     }
 
-    void http_response::write(const char* buf, size_t len) {
+    void http_response::send(const char* buf, size_t len) {
         if (len == 0) {
             len = strlen(buf);
         }
@@ -74,6 +75,27 @@ namespace frost {
 
         _tw.again();
         _ww.start();
+    }
+
+    void http_response::send_status(status_code code) {
+        send_status(code, DEFAULT_VERSION);
+    }
+
+    void http_response::send_status(status_code code, const http_version& version) {
+        auto& code_str = status_code_assist::desc(code);
+        auto& ver_str = DEFAULT_VERSION.to_string();
+        size_t len = 8 + 1 + 3 + 1 + code_str.length() + 2;  // HTTP/1.1 200 OK\r\n
+        char* buf = new char[len + 1];
+        stpncpy(buf, ver_str.c_str(), ver_str.length());
+        snprintf(buf + ver_str.length() - 1, len - ver_str.length() + 1, " %d %.*s\r\n", (int) code, (int) code_str.length(), code_str.c_str());
+        send(buf, len);
+        delete[] buf;
+    }
+
+    void http_response::send(status_code code, const char* body, size_t body_len) {
+        send_status(code);
+        send("\r\n", 2);
+        send(body, body_len);
     }
 
     void http_response::start() {

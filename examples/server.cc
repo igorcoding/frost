@@ -14,7 +14,7 @@ void on_request(frost::http_request* req, frost::http_response* resp) {
 //    resp->add_body();
 //    resp->finish();
 //
-//    resp->write_status(200);
+//    resp->send_status(200);
 //    resp->write_header("Content-Type", "application/json");
 //    resp->write_body("bla-bla-bla");
 //    resp->write_body("bla-bla-bla");
@@ -24,20 +24,17 @@ void on_request(frost::http_request* req, frost::http_response* resp) {
 }
 
 int main() {
-    cout << "Hello, World!" << endl;
     frost::http_server* server = new frost::http_server(8000);
     server->on("/", [](frost::http_request* req, frost::http_response* resp) {
-//        std::cout << "hello!!!" << std::endl;
-//        delete req;
-//        delete resp; // TODO: this is not correct
-
-        char msg[] = "HTTP/1.1 200 OK\r\nContent-Length: 18\r\n\r\nHello from server!";
-        resp->write(msg, 0);
+        resp->send_status(frost::status_code::OK);
+        char msg[] = "Content-Length: 18\r\n\r\nHello from server!";
+        resp->send(msg, 0);
+        // resp->send(frost::status_code::OK, "Hello from server!", 18);
         resp->finish();
     });
 
     server->on_signal(SIGINT, [server]() {
-        std::cerr << "cought sig" << std::endl;
+        std::cerr << "cought signal" << std::endl;
         server->stop();
     });
 

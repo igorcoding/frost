@@ -32,7 +32,7 @@ namespace frost {
           _body_size(0) {
         _rbuf = new char[_rlen];
 
-        ::fcntl(_client_fd, F_SETFL, fcntl(_client_fd, F_GETFL, 0) | O_NONBLOCK);
+        ::fcntl(_client_fd, F_SETFL, ::fcntl(_client_fd, F_GETFL, 0) | O_NONBLOCK);
         _rw.set(_client_fd, ev::READ);
         _tw.set(0.01, 5.0);
     }
@@ -40,9 +40,6 @@ namespace frost {
     http_request::~http_request() {
         delete[] _rbuf;
         _rbuf = nullptr;
-
-//        delete _cb;
-//        _cb = nullptr;
         stop();
     }
 
