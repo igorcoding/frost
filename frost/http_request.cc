@@ -20,7 +20,7 @@ namespace frost {
         : _rw(),
           _tw(),
           _client_fd(client_fd),
-          _rbuf(new char[_rlen]),
+          _rbuf(nullptr),
           _ruse(0),
           _rbuf_ptr(_rbuf),
 
@@ -30,6 +30,8 @@ namespace frost {
           _headers(),
           _body_ptr(nullptr),
           _body_size(0) {
+        _rbuf = new char[_rlen];
+
         ::fcntl(_client_fd, F_SETFL, fcntl(_client_fd, F_GETFL, 0) | O_NONBLOCK);
         _rw.set(_client_fd, ev::READ);
         _tw.set(0.01, 5.0);

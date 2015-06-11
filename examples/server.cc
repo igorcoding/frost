@@ -30,6 +30,10 @@ int main() {
 //        std::cout << "hello!!!" << std::endl;
 //        delete req;
 //        delete resp; // TODO: this is not correct
+
+        char msg[] = "HTTP/1.1 200 OK\r\nContent-Length: 18\r\n\r\nHello from server!";
+        resp->write(msg, 0);
+        resp->finish();
     });
 
     server->on_signal(SIGINT, [server]() {

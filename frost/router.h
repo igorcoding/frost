@@ -9,8 +9,8 @@ namespace frost {
     template <typename C>
     class router {
     public:
-        void add_route(const std::string& path, C&& cb);
-        void add_route(const char* path, C&& cb);
+        void add_route(const std::string& path, const C& cb);
+        void add_route(const char* path, const C& cb);
 
         const C* get_route(const std::string& path) const;
 
@@ -24,12 +24,12 @@ namespace frost {
     typedef router<cb_t> path_router_t;
 
     template <typename C> inline
-    void router<C>::add_route(const std::string& path, C&& cb) {
+    void router<C>::add_route(const std::string& path, const C& cb) {
         _paths[path] = std::move(cb);
     }
 
     template <typename C> inline
-    void router<C>::add_route(const char* path, C&& cb) {
+    void router<C>::add_route(const char* path, const C& cb) {
         _paths[path] = std::move(cb);
     }
 

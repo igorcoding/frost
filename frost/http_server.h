@@ -20,7 +20,7 @@ namespace frost {
     class http_server {
         typedef std::function<void()> signal_cb_t;
     public:
-        static constexpr int BACKLOG_SIZE = 5;
+        static constexpr int BACKLOG_SIZE = 100;
 
         http_server(uint16_t port);
         ~http_server();
@@ -29,9 +29,8 @@ namespace frost {
         state get_state() const;
         uint32_t get_active_connections() const;
 
-        void on(const char* path, cb_t&& cb);
-        void on(const std::string& path, cb_t&& cb);
-        void on_signal(int sig, signal_cb_t&& cb);
+        void on(const std::string& path, const cb_t& cb);
+        void on_signal(int sig, const signal_cb_t& cb);
 
         int start();
         void stop();
@@ -45,6 +44,9 @@ namespace frost {
 
         void read_timeout_cb(ev::timer& w, int revents);
         void write_timeout_cb(ev::timer& w, int revents);
+
+        http_request* create_request(int client_fd);
+        http_response* create_response(http_request* req);
 
         void start_signal_watchers();
         void stop_signal_watchers();
@@ -79,16 +81,12 @@ namespace frost {
         return _active_connections;
     }
 
-    inline void http_server::on(const char* path, cb_t&& cb) {
-        _router.add_route(path, std::move(cb));
+    inline void http_server::on(const std::string& path, const cb_t& cb) {
+        _router.add_route(path, cb);
     }
 
-    inline void http_server::on(const std::string& path, cb_t&& cb) {
-        _router.add_route(path, std::move(cb));
-    }
-
-    inline void http_server::on_signal(int sig, signal_cb_t&& cb) {
-        _signals_cb[sig] = std::move(cb);
+    inline void http_server::on_signal(int sig, const signal_cb_t& cb) {
+        _signals_cb[sig] = cb;
         ev::sig* w = new ev::sig;
         w->set(sig);
         w->set<http_server, &http_server::signal_cb>(this);
@@ -103,6 +101,21 @@ namespace frost {
     inline bool http_server::has_signal_watcher(int sig) {
         auto it = _signals.find(sig);
         return it != _signals.end();
+    }
+
+    inline http_request* http_server::create_request(int client_fd) {
+        http_request* req = new http_request(client_fd);
+        req->_rw.set<http_server, &http_server::read_cb>(this);
+        req->_tw.set<http_server, &http_server::read_timeout_cb>(this);
+        req->start();
+        return req;
+    }
+
+    inline http_response* http_server::create_response(http_request* req) {
+        http_response* resp = new http_response(req->_client_fd, req);
+        resp->_ww.set<http_server, &http_server::write_cb>(this);
+        resp->_tw.set<http_server, &http_server::write_timeout_cb>(this);
+        return resp;
     }
 }
 

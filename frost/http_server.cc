@@ -101,9 +101,6 @@ namespace frost {
         auto s = _signals_cb.find(sig);
         if (s != _signals_cb.end()) {
             s->second();
-        } else if (sig == SIGINT || sig == SIGTERM) {
-            std::cerr << "Terminating..." << std::endl;
-            stop();
         }
     }
 
@@ -117,22 +114,19 @@ namespace frost {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
 
+//        std::cout << "active connections: " << _active_connections << std::endl;
         int client_fd = ::accept(w.fd, (struct sockaddr *) &client_addr, &client_len);
         if (client_fd < 0) {
             perror("Accept error");
             return;
         }
         ++_active_connections;
-//        std::cout << _active_connections << "a" << std::endl;
-        http_request* req = new http_request(client_fd);
-        req->_rw.set<http_server, &http_server::read_cb>(this);
-        req->_tw.set<http_server, &http_server::read_timeout_cb>(this);
-        req->start();
+        create_request(client_fd);
     }
 
     void http_server::read_cb(ev::io& w, int revents) {
         if (ev::ERROR & revents) {
-            perror("got invalid event");
+            perror("read_cb: ERROR");
             return;
         }
         auto req = SELF(w, http_request, _rw);
@@ -150,19 +144,18 @@ namespace frost {
                         // TODO: respond with 413 Request Entity Too Large
                         // errno = ENOBUFS;
                         // perror("buffer exceeded");
+
                     } else {
                         req->_tw.again();
                     }
                     return;
                 }
                 case parse_result::GOOD: {
-//                    printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
+                    // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
                     w.stop();
                     // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
-                    http_response* resp = new http_response(req->_client_fd, req);
-                    resp->_ww.set<http_server, &http_server::write_cb>(this);
-                    resp->_tw.set<http_server, &http_server::write_timeout_cb>(this);
-                    resp->start();
+                    auto resp = create_response(req);
+                    // auto cb = _router.get_route(req->path());
                     auto cb = _router.get_route("/");
                     if (cb == nullptr) {
                         // TODO: 404
@@ -174,7 +167,7 @@ namespace frost {
                     return;
                 }
                 case parse_result::BAD: {
-                    // TODO: respond in bad request
+                    // TODO: respond with bad request
                     return;
                 }
             }
@@ -200,26 +193,54 @@ namespace frost {
 
     void http_server::write_cb(ev::io& w, int revents) {
         if (ev::ERROR & revents) {
-            perror("got invalid event");
+            perror("write_cb: ERROR");
             return;
         }
         auto resp = SELF(w, http_response, _ww);
         http_request* req = resp->_req;
         resp->_tw.stop(); // TODO: start again if we wrote not everything
 
-        char msg[] = "HTTP/1.1 200 OK\r\nContent-Length: 18\r\n\r\nHello from server!";
-        size_t s = strlen(msg);
+        ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
 
-        ssize_t written = ::send(w.fd, msg, s, 0);
-//        std::cout << "written: " << written << ". s: " << s << std::endl;
-        if (written < 0) {
+        if (written > -1) {
+            size_t i;
+            iovec* iov;
+            for (i = 0; i < resp->_wuse; i++) {
+                iov = &(resp->_wbuf[i]);
+                if (written < iov->iov_len) {
+                    memmove(iov->iov_base, iov->iov_base + written, iov->iov_len - written);
+                    iov->iov_len -= written;
+                    break;
+                } else {
+                    free(iov->iov_base);
+                    written -= iov->iov_len;
+                }
+            }
+            resp->_wuse -= i;
+            if (resp->_wuse == 0) {
+                if (resp->finished()) {
+                    --_active_connections;
+                    delete resp;
+                    delete req;
+                }
+            } else {
+                memmove(resp->_wbuf, resp->_wbuf + i, resp->_wuse * sizeof(iovec));
+                resp->_tw.again();
+                return;
+            }
+
+        } else if (written < 0) {
             perror("write error");
+
+            switch (errno) {
+                case EAGAIN:
+                    break;
+                case EINTR:
+                    break;
+                default:
+                    break;
+            }
             return;
-        }
-        if (written == s) {
-            delete resp;
-            delete req;
-            --_active_connections;
         }
     }
 
