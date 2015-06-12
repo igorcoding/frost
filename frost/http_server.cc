@@ -140,11 +140,9 @@ namespace frost {
             switch (p) {
                 case parse_result::NEED_MORE: {
                     if (req->_ruse >= req->_rlen) {
-                        // TODO: somehow react to buffer exceeding
-                        // TODO: respond with 413 Request Entity Too Large
-                        // errno = ENOBUFS;
-                        // perror("buffer exceeded");
-
+                        auto resp = create_response(req);
+                        resp->write(status_code::REQUEST_ENTITY_TOO_LARGE, "", 0);
+                        resp->finish();
                     } else {
                         req->_tw.again();
                     }
@@ -152,13 +150,19 @@ namespace frost {
                 }
                 case parse_result::GOOD: {
                     // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
-//                    w.stop();
-                    // TODO: prepare http_response and call appropriate cb or 404 if no cb specified
                     auto resp = create_response(req);
                     // auto cb = _router.get_route(req->path());
-                    auto cb = _router.get_route("/");
+                    auto cb = _router.get_route("/path");
                     if (cb == nullptr) {
-                        // TODO: 404
+                        char* buf = new char[1024];
+                        int len = snprintf(buf, 1024, "Path \'%.*s\' not found on the server", (int) req->path().length(), req->path().c_str());
+                        if (len >= 0) {
+                            resp->write(status_code::NOT_FOUND, buf, static_cast<size_t>(len));
+                        } else {
+                            perror("[http_server::read_cb] snprintf failed");
+                        }
+                        resp->finish();
+                        delete[] buf;
                     } else {
                         // TODO: check if method is allowed
                         (*cb)(req, resp);
@@ -167,7 +171,9 @@ namespace frost {
                     return;
                 }
                 case parse_result::BAD: {
-                    // TODO: respond with bad request
+                    auto resp = create_response(req);
+                    resp->write(status_code::BAD_REQUEST, "Couldn\'t parse your reqeust", 27);
+                    resp->finish();
                     return;
                 }
             }
@@ -187,7 +193,6 @@ namespace frost {
             return;
         } else {
             --_active_connections;
-            // perror("EOF");
             delete req;
         }
     }
@@ -204,17 +209,18 @@ namespace frost {
         ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
 
         if (written > -1) {
+            size_t wr = static_cast<size_t>(written);
             size_t i;
             iovec* iov;
             for (i = 0; i < resp->_wuse; i++) {
                 iov = &(resp->_wbuf[i]);
-                if (written < iov->iov_len) {
-                    memmove(iov->iov_base, iov->iov_base + written, iov->iov_len - written);
-                    iov->iov_len -= written;
+                if (wr < iov->iov_len) {
+                    memmove(iov->iov_base, (char*) iov->iov_base + wr, iov->iov_len - wr);
+                    iov->iov_len -= wr;
                     break;
                 } else {
                     free(iov->iov_base);
-                    written -= iov->iov_len;
+                    wr -= iov->iov_len;
                 }
             }
             resp->_wuse -= i;

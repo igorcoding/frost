@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <stdlib.h>
+#include <iostream>
 
 #define memdup(a,b) memcpy(malloc(b),a,b)
 
@@ -28,7 +29,7 @@ namespace frost {
                 const uint8_t max = 9;
                 char* buf = new char[max];
                 snprintf(buf, max, "HTTP/%d.%d", major_ver, minor_ver);
-                _ver_str = new std::string(buf, max);
+                _ver_str = new std::string(buf);
                 delete[] buf;
             }
             return *_ver_str;
@@ -36,15 +37,6 @@ namespace frost {
 
     private:
         std::string* _ver_str;
-    };
-
-    struct header {
-        std::string name;
-        std::string value;
-
-        header(const std::string& name, const std::string& value)
-                : name(name),
-                  value(value) { }
     };
 
     struct enum_class_hash

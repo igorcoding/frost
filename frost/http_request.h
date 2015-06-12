@@ -3,6 +3,7 @@
 
 #include "router.h"
 #include "util/util.h"
+#include "http/header.h"
 
 #include <ev++.h>
 #include <vector>

@@ -5,9 +5,11 @@
 #include <ev++.h>
 #include <functional>
 #include <unordered_map>
+#include <string.h>
 
 #include "util/util.h"
 #include "http/status.h"
+#include "http/header.h"
 
 namespace frost {
 
@@ -25,14 +27,18 @@ namespace frost {
 
         bool finished();
 
-        void send(const char* buf, size_t len);
-        void send_status(status_code code);
-        void send_status(status_code code, const http_version& version);
+        void write_raw(const char* buf, size_t len);
+        void write_status(status_code code);
+        void write_status(status_code code, http_version& version);
+        template <typename VALUE> bool write_header(const char* name, VALUE value);
+
+        void write(status_code code, const char* body, size_t body_len);
+
         void finish();
 
-        void send(status_code code, const char* body, size_t body_len);
     private:
         void start();
+        template <typename VALUE> bool write_header(char* buf, size_t buf_len, const char* name, VALUE value);
 
         void stop();
     private:
@@ -47,11 +53,33 @@ namespace frost {
         uint32_t _wlen;
 
         bool _finished;
+
+        static constexpr size_t HEADER_BUF_LEN = 50;
     };
 
 
     inline bool http_response::finished() {
         return _finished;
+    }
+
+    template <typename VALUE> inline
+    bool http_response::write_header(const char* name, VALUE value) {
+        char* buf = new char[HEADER_BUF_LEN];
+        bool status = write_header(buf, HEADER_BUF_LEN, name, value);
+        delete[] buf;
+        return status;
+    }
+
+    template <typename VALUE> inline
+    bool http_response::write_header(char* buf, size_t buf_len, const char* name, VALUE value) {
+        int len = header::build_header_str(buf, buf_len, name, value);
+        if (len < 0) {
+            perror("Error in snprintf");
+            return false;
+        } else {
+            write_raw(buf, static_cast<size_t>(len));
+            return true;
+        }
     }
 
     inline void http_response::finish() {

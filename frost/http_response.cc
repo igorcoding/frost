@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <iostream>
 #include "http_response.h"
+#include "globals.h"
 
 namespace frost {
 
@@ -30,7 +31,7 @@ namespace frost {
         free(_wbuf);
     }
 
-    void http_response::send(const char* buf, size_t len) {
+    void http_response::write_raw(const char* buf, size_t len) {
         if (len == 0) {
             len = strlen(buf);
         }
@@ -48,11 +49,11 @@ namespace frost {
 
         ssize_t written = 0;
 
-//        written = ::send(_client_fd, buf, len, 0);
+//        written = ::write_raw(_client_fd, buf, len, 0);
 //        if (written == len) {
 //            return;
 //        } else if (written < 0) {
-//            perror("write error");
+//            perror("write_raw error");
 //
 //            switch (errno) {
 //                case EAGAIN:
@@ -77,25 +78,35 @@ namespace frost {
         _ww.start();
     }
 
-    void http_response::send_status(status_code code) {
-        send_status(code, DEFAULT_VERSION);
+    void http_response::write_status(status_code code) {
+        write_status(code, DEFAULT_VERSION);
     }
 
-    void http_response::send_status(status_code code, const http_version& version) {
+    void http_response::write_status(status_code code, http_version& version) {
         auto& code_str = status_code_assist::desc(code);
-        auto& ver_str = DEFAULT_VERSION.to_string();
-        size_t len = 8 + 1 + 3 + 1 + code_str.length() + 2;  // HTTP/1.1 200 OK\r\n
-        char* buf = new char[len + 1];
-        stpncpy(buf, ver_str.c_str(), ver_str.length());
-        snprintf(buf + ver_str.length() - 1, len - ver_str.length() + 1, " %d %.*s\r\n", (int) code, (int) code_str.length(), code_str.c_str());
-        send(buf, len);
+        auto& ver_str = version.to_string();
+        size_t buf_len = 30;
+        char* buf = new char[buf_len];
+        int len = snprintf(buf, buf_len, "%s %d %.*s\r\n", ver_str.c_str(), (int) code, (int) code_str.length(), code_str.c_str());
+        if (len < 0) {
+            perror("[http_response::write_status]: snprintf failed");
+        } else {
+            write_raw(buf, static_cast<size_t>(len));
+        }
         delete[] buf;
     }
 
-    void http_response::send(status_code code, const char* body, size_t body_len) {
-        send_status(code);
-        send("\r\n", 2);
-        send(body, body_len);
+    void http_response::write(status_code code, const char* body, size_t body_len) {
+        if (body_len == 0) body_len = strlen(body);
+        write_status(code);
+
+        char* buf = new char[HEADER_BUF_LEN];
+        write_header(buf, HEADER_BUF_LEN, "Server", VERSION_STR);
+        write_header(buf, HEADER_BUF_LEN, "Content-Length", body_len);
+        write_header(buf, HEADER_BUF_LEN, "Content-Type", "text/plain");
+        delete[] buf;
+        write_raw("\r\n", 2);
+        write_raw(body, body_len);
     }
 
     void http_response::start() {

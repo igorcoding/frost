@@ -7,7 +7,7 @@
 
 namespace frost
 {
-    enum class status_code {
+    enum status_code {
         OK = 200,
 
         BAD_REQUEST = 400,
