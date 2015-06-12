@@ -9,14 +9,11 @@
 #define memdup(a,b) memcpy(malloc(b),a,b)
 
 namespace frost {
-    struct http_version {
+    class http_version {
     public:
-        const int major_ver;
-        const int minor_ver;
-
         http_version(int major_ver, int minor_ver)
-                : major_ver(major_ver),
-                  minor_ver(minor_ver),
+                : _major_ver(major_ver),
+                  _minor_ver(minor_ver),
                   _ver_str(nullptr) { }
 
         ~http_version() {
@@ -24,11 +21,19 @@ namespace frost {
             _ver_str = nullptr;
         }
 
+        int major_ver() const { return _major_ver; }
+        int minor_ver() const { return _minor_ver; }
+
+        void clear() {
+            _major_ver = 0;
+            _minor_ver = 0;
+        }
+
         const std::string& to_string() {
             if (_ver_str == nullptr) {
                 const uint8_t max = 9;
                 char* buf = new char[max];
-                snprintf(buf, max, "HTTP/%d.%d", major_ver, minor_ver);
+                snprintf(buf, max, "HTTP/%d.%d", _major_ver, _minor_ver);
                 _ver_str = new std::string(buf);
                 delete[] buf;
             }
@@ -36,6 +41,8 @@ namespace frost {
         }
 
     private:
+        int _major_ver;
+        int _minor_ver;
         std::string* _ver_str;
     };
 

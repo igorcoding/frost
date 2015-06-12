@@ -19,7 +19,7 @@ namespace frost {
           _wlen(0),
           _finished(false) {
         _ww.set(_client_fd, ev::WRITE);
-        _tw.set(0.01, 5.0);
+        _tw.set(5.0, 0);
     }
 
     http_response::~http_response() {
@@ -121,9 +121,10 @@ namespace frost {
         if (_ww.is_active()) {
             _ww.stop();
         }
-        if (_client_fd > -1) {
-            ::close(_client_fd);
-            _client_fd = -1;
-        }
+//        if (_client_fd > -1) {
+//            printf("closing socket in resp\n");
+//            ::close(_client_fd);
+//            _client_fd = -1;
+//        }
     }
 }

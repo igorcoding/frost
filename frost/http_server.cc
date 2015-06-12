@@ -130,6 +130,7 @@ namespace frost {
             return;
         }
         auto req = SELF(w, http_request, _rw);
+        w.stop();
         req->_tw.stop();
 
         ssize_t nread = ::recv(w.fd, req->_rbuf + req->_ruse, req->_rlen - req->_ruse, 0);
@@ -144,6 +145,7 @@ namespace frost {
                         resp->write(status_code::REQUEST_ENTITY_TOO_LARGE, "", 0);
                         resp->finish();
                     } else {
+                        w.start();
                         req->_tw.again();
                     }
                     return;
@@ -152,7 +154,7 @@ namespace frost {
                     // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
                     auto resp = create_response(req);
                     // auto cb = _router.get_route(req->path());
-                    auto cb = _router.get_route("/path");
+                    auto cb = _router.get_route("/");
                     if (cb == nullptr) {
                         char* buf = new char[1024];
                         int len = snprintf(buf, 1024, "Path \'%.*s\' not found on the server", (int) req->path().length(), req->path().c_str());
@@ -180,6 +182,7 @@ namespace frost {
 
         } else if (nread < 0) {
             perror("read error");
+            w.start();
 
             switch (errno) {
                 case EAGAIN:
@@ -193,17 +196,20 @@ namespace frost {
             return;
         } else {
             --_active_connections;
+            auto resp = req->get_http_response();
+            delete resp;
             delete req;
         }
     }
 
     void http_server::write_cb(ev::io& w, int revents) {
         if (ev::ERROR & revents) {
-            perror("write_cb: ERROR");
+            perror("[http_server::write_cb] ERROR");
             return;
         }
         auto resp = SELF(w, http_response, _ww);
         http_request* req = resp->_req;
+        w.stop();
         resp->_tw.stop(); // TODO: start again if we wrote not everything
 
         ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
@@ -226,18 +232,31 @@ namespace frost {
             resp->_wuse -= i;
             if (resp->_wuse == 0) {
                 if (resp->finished()) {
-                    --_active_connections;
-                    delete resp;
-                    delete req;
+                    if (req->is_keep_alive()) {
+                        delete resp;
+                        req->clear();
+                        req->_keep_alive_w.set<http_server, &http_server::keep_alive_cb>(this);
+                        req->start_keep_alive();
+                    } else {
+                        --_active_connections;
+                        delete resp;
+                        resp = nullptr;
+                        delete req;
+                        req = nullptr;
+                    }
+                } else {
+                    resp->_tw.start();
                 }
             } else {
                 memmove(resp->_wbuf, resp->_wbuf + i, resp->_wuse * sizeof(iovec));
+                w.start();
                 resp->_tw.again();
                 return;
             }
 
         } else if (written < 0) {
             perror("write error");
+            w.start();
 
             switch (errno) {
                 case EAGAIN:
@@ -252,11 +271,25 @@ namespace frost {
     }
 
     void http_server::read_timeout_cb(ev::timer& w, int revents) {
+        std::cout << "read timeout" << std::endl;
+        auto req = SELF(w, http_request, _tw);
+        delete req->get_http_response();
+        delete req;
+    }
 
+    void http_server::keep_alive_cb(ev::timer& w, int revents) {
+        std::cout << "keep alive timeout" << std::endl;
+        w.stop();
+        auto req = SELF(w, http_request, _keep_alive_w);
+        delete req;
     }
 
     void http_server::write_timeout_cb(ev::timer& w, int revents) {
-
+        std::cout << "write timeout" << std::endl;
+        auto resp = SELF(w, http_response, _tw);
+        auto req = resp->_req;
+        delete resp;
+        delete req;
     }
 
     void http_server::start_signal_watchers() {

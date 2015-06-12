@@ -4,6 +4,7 @@
 #include "router.h"
 #include "util/util.h"
 #include "http/header.h"
+#include "http_response.h"
 
 #include <ev++.h>
 #include <vector>
@@ -28,6 +29,7 @@ namespace frost {
     };
 
 
+    class http_response;
     class http_request {
         friend class http_server;
     public:
@@ -41,16 +43,24 @@ namespace frost {
         const char* body() const;
         uint32_t body_size() const;
 
+        bool is_keep_alive() const;
+
         static void set_max_buffer_size(uint32_t max_buffer);
 
     private:
         void start();
+        void start_keep_alive();
         void stop();
         parse_result parse();
+        void clear();
+
+        void set_http_response(http_response* resp);
+        http_response* get_http_response();
 
     private:
         ev::io _rw;
         ev::timer _tw;
+        ev::timer _keep_alive_w;
         int _client_fd;
         char* _rbuf;
         uint32_t _ruse;
@@ -64,6 +74,13 @@ namespace frost {
         std::vector<header> _headers;
         char* _body_ptr;
         uint32_t _body_size;
+
+        bool _keep_alive;
+
+        http_response* __resp;
+
+        static size_t _KEEP_ALIVE_COUNT;
+        static constexpr size_t _KEEP_ALIVE_MAX = 100;  // TODO: this is invalid because of fork
     };
 
 
@@ -89,6 +106,10 @@ namespace frost {
 
     inline uint32_t http_request::body_size() const {
         return _body_size;
+    }
+
+    inline bool http_request::is_keep_alive() const {
+        return _keep_alive;
     }
 }
 

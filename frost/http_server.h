@@ -43,6 +43,7 @@ namespace frost {
         void write_cb(ev::io& w, int revents);
 
         void read_timeout_cb(ev::timer& w, int revents);
+        void keep_alive_cb(ev::timer& w, int revents);
         void write_timeout_cb(ev::timer& w, int revents);
 
         http_request* create_request(int client_fd);
@@ -115,6 +116,7 @@ namespace frost {
         http_response* resp = new http_response(req->_client_fd, req);
         resp->_ww.set<http_server, &http_server::write_cb>(this);
         resp->_tw.set<http_server, &http_server::write_timeout_cb>(this);
+        req->set_http_response(resp);
         return resp;
     }
 }
