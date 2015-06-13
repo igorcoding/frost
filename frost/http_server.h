@@ -33,7 +33,11 @@ namespace frost {
         void on_signal(int sig, const signal_cb_t& cb);
 
         int start();
+        int listen();
+        void accept();
         void stop();
+
+        void notify_fork_child();
 
     private:
         int start_listen();

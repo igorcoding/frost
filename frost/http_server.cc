@@ -29,19 +29,9 @@ namespace frost {
 
 
     int http_server::start() {
-        if ((_listenfd = start_listen()) < 0) {
-            return -1;
-        }
-        std::cout << "Listening 0.0.0.0:" << _port << std::endl;
-        add_on_exit_watchers();
-
-        _accept_w.set<http_server, &http_server::accept_cb>(this);
-        _accept_w.set(_listenfd, ev::READ);
-
-        start_signal_watchers();
-        _accept_w.start();
-        _state = state::STARTED;
-        _loop.run();
+        int l = listen();
+        if (l != 0) return l;
+        accept();
         return 0;
     }
 
@@ -54,6 +44,29 @@ namespace frost {
         stop_signal_watchers();
         _loop.break_loop(ev::how_t::ALL);
         _state = state::STOPPED;
+    }
+
+    int http_server::listen() {
+        if ((_listenfd = start_listen()) < 0) {
+            return -1;
+        }
+        std::cout << "Listening 0.0.0.0:" << _port << std::endl;
+        add_on_exit_watchers();
+        return 0;
+    }
+
+    void http_server::accept() {
+        _accept_w.set<http_server, &http_server::accept_cb>(this);
+        _accept_w.set(_listenfd, ev::READ);
+
+        start_signal_watchers();
+        _accept_w.start();
+        _state = state::STARTED;
+        _loop.run();
+    }
+
+    void http_server::notify_fork_child() {
+        _loop.post_fork();
     }
 
     int http_server::start_listen() {
@@ -105,7 +118,6 @@ namespace frost {
     }
 
     void http_server::accept_cb(ev::io& w, int revents) {
-        // w.stop(); // TODO
         if (ev::ERROR & revents) {
             perror("Got invalid event");
             return;
@@ -133,73 +145,72 @@ namespace frost {
         w.stop();
         req->_tw.stop();
 
-        ssize_t nread = ::recv(w.fd, req->_rbuf + req->_ruse, req->_rlen - req->_ruse, 0);
-        if (nread > 0) {
-            req->_ruse += nread;
+        do {
+            ssize_t nread = ::recv(w.fd, req->_rbuf + req->_ruse, req->_rlen - req->_ruse, 0);
+            if (nread > 0) {
+                req->_ruse += nread;
 
-            auto p = req->parse();
-            switch (p) {
-                case parse_result::NEED_MORE: {
-                    if (req->_ruse >= req->_rlen) {
-                        auto resp = create_response(req);
-                        resp->write(status_code::REQUEST_ENTITY_TOO_LARGE, "", 0);
-                        resp->finish();
-                    } else {
-                        w.start();
-                        req->_tw.again();
-                    }
-                    return;
-                }
-                case parse_result::GOOD: {
-                    // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
-                    auto resp = create_response(req);
-                    // auto cb = _router.get_route(req->path());
-                    auto cb = _router.get_route("/");
-                    if (cb == nullptr) {
-                        char* buf = new char[1024];
-                        int len = snprintf(buf, 1024, "Path \'%.*s\' not found on the server", (int) req->path().length(), req->path().c_str());
-                        if (len >= 0) {
-                            resp->write(status_code::NOT_FOUND, buf, static_cast<size_t>(len));
+                auto p = req->parse();
+                switch (p) {
+                    case parse_result::NEED_MORE: {
+                        if (req->_ruse >= req->_rlen) {
+                            auto resp = create_response(req);
+                            resp->write(status_code::REQUEST_ENTITY_TOO_LARGE, "", 0);
+                            resp->finish();
                         } else {
-                            perror("[http_server::read_cb] snprintf failed");
+                            w.start();
+                            req->_tw.again();
                         }
-                        resp->finish();
-                        delete[] buf;
-                    } else {
-                        // TODO: check if method is allowed
-                        (*cb)(req, resp);
+                        return;
                     }
+                    case parse_result::GOOD: {
+                        // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
+                        auto resp = create_response(req);
+                        // auto cb = _router.get_route(req->path());
+                        auto cb = _router.get_route("/");
+                        if (cb == nullptr) {
+                            char* buf = new char[1024];
+                            int len = snprintf(buf, 1024, "Path \'%.*s\' not found on the server",
+                                               (int) req->path().length(), req->path().c_str());
+                            if (len >= 0) {
+                                resp->write(status_code::NOT_FOUND, buf, static_cast<size_t>(len));
+                            } else {
+                                perror("[http_server::read_cb] snprintf failed");
+                            }
+                            resp->finish();
+                            delete[] buf;
+                        } else {
+                            // TODO: check if method is allowed
+                            (*cb)(req, resp);
+                        }
 
-                    return;
+                        return;
+                    }
+                    case parse_result::BAD: {
+                        auto resp = create_response(req);
+                        resp->write(status_code::BAD_REQUEST, "Couldn\'t parse your reqeust", 27);
+                        resp->finish();
+                        return;
+                    }
                 }
-                case parse_result::BAD: {
-                    auto resp = create_response(req);
-                    resp->write(status_code::BAD_REQUEST, "Couldn\'t parse your reqeust", 27);
-                    resp->finish();
-                    return;
+
+            } else if (nread < 0) {
+                switch (errno) {
+                    case EAGAIN:
+                        return;
+                    case EINTR:
+                        continue;
+                    default:
+                        perror("read error");
+                        delete req;
                 }
+            } else {
+                --_active_connections;
+                auto resp = req->get_http_response();
+                delete resp;
+                delete req;
             }
-
-        } else if (nread < 0) {
-            perror("read error");
-            w.start();
-
-            switch (errno) {
-                case EAGAIN:
-                    break;
-                case EINTR:
-                    break;
-                default:
-                    break;
-            }
-
-            return;
-        } else {
-            --_active_connections;
-            auto resp = req->get_http_response();
-            delete resp;
-            delete req;
-        }
+        } while (0);
     }
 
     void http_server::write_cb(ev::io& w, int revents) {
@@ -210,64 +221,65 @@ namespace frost {
         auto resp = SELF(w, http_response, _ww);
         http_request* req = resp->_req;
         w.stop();
-        resp->_tw.stop(); // TODO: start again if we wrote not everything
+        resp->_tw.stop();
 
-        ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
+        do {
+            ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
 
-        if (written > -1) {
-            size_t wr = static_cast<size_t>(written);
-            size_t i;
-            iovec* iov;
-            for (i = 0; i < resp->_wuse; i++) {
-                iov = &(resp->_wbuf[i]);
-                if (wr < iov->iov_len) {
-                    memmove(iov->iov_base, (char*) iov->iov_base + wr, iov->iov_len - wr);
-                    iov->iov_len -= wr;
-                    break;
-                } else {
-                    free(iov->iov_base);
-                    wr -= iov->iov_len;
-                }
-            }
-            resp->_wuse -= i;
-            if (resp->_wuse == 0) {
-                if (resp->finished()) {
-                    if (req->is_keep_alive()) {
-                        delete resp;
-                        req->clear();
-                        req->_keep_alive_w.set<http_server, &http_server::keep_alive_cb>(this);
-                        req->start_keep_alive();
+            if (written > -1) {
+                size_t wr = static_cast<size_t>(written);
+                size_t i;
+                iovec* iov;
+                for (i = 0; i < resp->_wuse; i++) {
+                    iov = &(resp->_wbuf[i]);
+                    if (wr < iov->iov_len) {
+                        memmove(iov->iov_base, (char*) iov->iov_base + wr, iov->iov_len - wr);
+                        iov->iov_len -= wr;
+                        break;
                     } else {
-                        --_active_connections;
-                        delete resp;
-                        resp = nullptr;
-                        delete req;
-                        req = nullptr;
+                        free(iov->iov_base);
+                        wr -= iov->iov_len;
+                    }
+                }
+                resp->_wuse -= i;
+                if (resp->_wuse == 0) {
+                    if (resp->finished()) {
+                        if (req->is_keep_alive()) {
+                            delete resp;
+                            req->clear();
+                            req->_keep_alive_w.set<http_server, &http_server::keep_alive_cb>(this);
+                            req->start_keep_alive();
+                        } else {
+                            --_active_connections;
+                            delete resp;
+                            resp = nullptr;
+                            delete req;
+                            req = nullptr;
+                        }
+                    } else {
+                        resp->_tw.start();
                     }
                 } else {
-                    resp->_tw.start();
+                    memmove(resp->_wbuf, resp->_wbuf + i, resp->_wuse * sizeof(iovec));
+                    w.start();
+                    resp->_tw.again();
+                    return;
                 }
-            } else {
-                memmove(resp->_wbuf, resp->_wbuf + i, resp->_wuse * sizeof(iovec));
-                w.start();
-                resp->_tw.again();
+
+            } else if (written < 0) {
+                switch (errno) {
+                    case EAGAIN:
+                        break;
+                    case EINTR:
+                        continue;
+                    default:
+                        perror("write error");
+                        delete resp;
+                        delete req;
+                }
                 return;
             }
-
-        } else if (written < 0) {
-            perror("write error");
-            w.start();
-
-            switch (errno) {
-                case EAGAIN:
-                    break;
-                case EINTR:
-                    break;
-                default:
-                    break;
-            }
-            return;
-        }
+        } while(0);
     }
 
     void http_server::read_timeout_cb(ev::timer& w, int revents) {
