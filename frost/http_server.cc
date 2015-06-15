@@ -119,7 +119,7 @@ namespace frost {
 
     void http_server::accept_cb(ev::io& w, int revents) {
         if (ev::ERROR & revents) {
-            perror("Got invalid event");
+            perror("[http_server::accept_cb] error");
             return;
         }
 
@@ -129,7 +129,7 @@ namespace frost {
 //        std::cout << "active connections: " << _active_connections << std::endl;
         int client_fd = ::accept(w.fd, (struct sockaddr *) &client_addr, &client_len);
         if (client_fd < 0) {
-            perror("Accept error");
+            perror("[http_server::accept_cb] accept error");
             return;
         }
         ++_active_connections;
@@ -167,8 +167,7 @@ namespace frost {
                     case parse_result::GOOD: {
 //                         printf("====\nGot request:\n%.*s\n====\n", req->_ruse, req->_rbuf);
                         auto resp = create_response(req);
-                        // auto cb = _router.get_route(req->path());
-                        auto cb = _router.get_route("/");
+                        auto cb = _router.get_route(req->path());
                         if (cb == nullptr) {
                             char* buf = new char[1024];
                             int len = snprintf(buf, 1024, "Path \'%.*s\' not found on the server",
