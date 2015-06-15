@@ -47,6 +47,8 @@ namespace frost {
           _parse_state(parse_state::BEGIN),
           _method(http_method::NONE),
           _version({0, 0}),
+          _path(nullptr),
+          _path_len(0),
           _headers(),
           _body_ptr(nullptr),
           _body_size(0),
@@ -54,16 +56,10 @@ namespace frost {
           _keep_alive(false),
           __resp(nullptr),
 
-          _work_buf(nullptr),
-          _work_buf_len(0),
           _work_buf_use(0),
-          _content_length_await(false) {
+          _content_length_coming(false) {
         _rbuf = new char[_rlen];
         _rbuf_ptr = _rbuf;
-
-        _work_buf_len = 200;
-        _work_buf = new char[_work_buf_len];
-
         ::fcntl(_client_fd, F_SETFL, ::fcntl(_client_fd, F_GETFL, 0) | O_NONBLOCK);
         _rw.set(_client_fd, ev::READ);
         _tw.set(5.0, 0);
@@ -76,8 +72,6 @@ namespace frost {
         delete[] _rbuf;
         _rbuf = nullptr;
 
-        free(_work_buf);
-        _work_buf = nullptr;
         stop();
     }
 
@@ -113,7 +107,8 @@ namespace frost {
         _parse_result = parse_result::NEED_MORE;
         _method = http_method::NONE;
         _version.clear();
-        _path.clear();
+        _path = nullptr;
+        _path_len = 0;
         _headers.clear();
         _body_ptr = nullptr;
         _body_size = 0;
@@ -142,10 +137,6 @@ namespace frost {
                 return parse_result::NEED_MORE;
             }
 
-            if (_work_buf_len != 0 && _parse_state != parse_state::PATH && _work_buf_use == _work_buf_len) {
-                _work_buf = (char*) realloc(_work_buf, _work_buf_len *= 2);
-            }
-
             switch (_parse_state) {
 
                 case parse_state::BEGIN: {
@@ -165,12 +156,12 @@ namespace frost {
                         return parse_result::BAD;
                     }
                     if (ch != ' ') {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     } else {
                         #ifdef ALLOW_PRINT
                         printf("method: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-                        _method = http_method_assist::from_str(std::string(_work_buf, _work_buf_use));
+//                        _method = http_method_assist::from_str(std::string(_work_buf, _work_buf_use));
                         _work_buf_use = 0;
                         _parse_state = parse_state::PATH;
                     }
@@ -186,12 +177,13 @@ namespace frost {
                     }
                     // TODO: discard special characters maybe?
                     if (ch != ' ') {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     } else {
                         #ifdef ALLOW_PRINT
                         printf("path: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-                        _path = std::string(_work_buf, _work_buf_use);
+                        _path = _rbuf_ptr - _work_buf_use;
+                        _path_len = _work_buf_use;
                         _work_buf_use = 0;
                         _parse_state = parse_state::PROTOCOL;
                     }
@@ -258,10 +250,10 @@ namespace frost {
                 case parse_state::PROTOCOL_MAJOR: {
                     auto ch = *_rbuf_ptr;
                     if (IS_DIGIT(ch)) {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     } else {
                         if (ch == '.') {
-                            _version.set_major_ver(frost::atoi_positive(_work_buf, _work_buf_use));
+                            _version.set_major_ver(frost::atoi_positive(_rbuf_ptr - _work_buf_use, _work_buf_use));
                             _work_buf_use = 0;
                             _parse_state = parse_state::PROTOCOL_MINOR;
                         } else {
@@ -275,10 +267,10 @@ namespace frost {
                 case parse_state::PROTOCOL_MINOR: {
                     auto ch = *_rbuf_ptr;
                     if (IS_DIGIT(ch)) {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     } else {
                         if (ch == '\r') {
-                            _version.set_minor_ver(frost::atoi_positive(_work_buf, _work_buf_use));
+                            _version.set_minor_ver(frost::atoi_positive(_rbuf_ptr - _work_buf_use, _work_buf_use));
                             #ifdef ALLOW_PRINT
                             printf("version: %s\n", _version.to_string().c_str());
                             #endif
@@ -323,15 +315,16 @@ namespace frost {
                     if (ch == '\r' || ch == '\n') {
                         return parse_result::BAD;
                     } else if (ch != ':') {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     } else {
-                        if (strncasecmp(_work_buf, "Content-Length", _work_buf_use) == 0) {
-                            _content_length_await = true;
+                        _current_header_name = _rbuf_ptr - _work_buf_use;
+                        _current_header_len = _work_buf_use;
+                        if (strncasecmp(_current_header_name, "Content-Length", _current_header_len) == 0) {
+                            _content_length_coming = true;
                         }
                         #ifdef ALLOW_PRINT
                         printf("header_name: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-                        _headers.emplace_back(header(std::string(_work_buf, _work_buf_use)));
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_VALUE;
                     }
@@ -346,9 +339,11 @@ namespace frost {
                     } else if (ch == '\n') {
                         return parse_result::BAD;
                     } else if (ch == '\r') {
-                        if (_content_length_await) {
-                            _content_length_await = false;
-                            int body_size = frost::atoi_positive(_work_buf, _work_buf_use);
+                        auto current_header_value = _rbuf_ptr - _work_buf_use;
+                        auto current_header_value_len = _work_buf_use;
+                        if (_content_length_coming) {
+                            _content_length_coming = false;
+                            int body_size = frost::atoi_positive(current_header_value, current_header_value_len);
                             if (body_size > 0) {
                                 _body_size = static_cast<uint32_t>(body_size);
                             }
@@ -356,11 +351,12 @@ namespace frost {
                         #ifdef ALLOW_PRINT
                         printf("header_value: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-                        _headers.back().set_value(std::string(_work_buf, _work_buf_use));
+                        _headers.emplace_back(header(_current_header_name, _current_header_len,
+                                                     current_header_value, current_header_value_len));
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_BREAK_R;
                     } else {
-                        _work_buf[_work_buf_use++] = ch;
+                        _work_buf_use++;
                     }
                     ++_rbuf_ptr;
                     continue;

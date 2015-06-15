@@ -49,7 +49,8 @@ namespace frost {
 
         const http_method& method() const;
         const http_version& version() const;
-        const std::string& path() const;
+        const char* path() const;
+        size_t path_len() const;
         const std::vector<header>& headers() const;
         const char* body() const;
         uint32_t body_size() const;
@@ -82,7 +83,8 @@ namespace frost {
         parse_state _parse_state;
         http_method _method;
         http_version _version;
-        std::string _path;
+        const char* _path;
+        size_t _path_len;
         std::vector<header> _headers;
         char* _body_ptr;
         uint32_t _body_size;
@@ -96,10 +98,10 @@ namespace frost {
 
         static size_t path_max_size;
 
-        char* _work_buf;
-        size_t _work_buf_len;
         size_t _work_buf_use;
-        bool _content_length_await;
+        const char* _current_header_name;
+        size_t _current_header_len;
+        bool _content_length_coming;
     };
 
 
@@ -111,8 +113,12 @@ namespace frost {
         return _version;
     }
 
-    inline const std::string& http_request::path() const {
+    inline const char* http_request::path() const {
         return _path;
+    }
+
+    inline size_t http_request::path_len() const {
+        return _path_len;
     }
 
     inline const std::vector<header>& http_request::headers() const {

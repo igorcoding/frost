@@ -7,23 +7,18 @@
 namespace frost {
 
     struct header {
-        std::string name;
-        std::string value;
+        const char* const name;
+        size_t name_len;
+        const char* const value;
+        size_t value_len;
 
-        header(const std::string& name)
-                : name(name) { }
-
-        header(const std::string& name, const std::string& value)
+        header(const char* const name, size_t name_len, const char* const value, size_t value_len)
                 : name(name),
-                  value(value) { }
+                  name_len(name_len),
+                  value(value),
+                  value_len(value_len) { }
 
-        void set_name(const std::string& name) {
-            this->name = name;
-        }
 
-        void set_value(const std::string& value) {
-            this->value = value;
-        }
 
 //        static int build_header_str(char* buf, size_t buf_len, const header& h);
         template<typename VALUE> static int build_header_str(char* buf, size_t buf_len, const char* name, VALUE value);
