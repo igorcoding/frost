@@ -22,8 +22,6 @@
     buf_use = 0;\
 } while(0);
 
-#define IS_DIGIT(ch) ((ch) == '1' || (ch) == '2' || (ch) == '3' || (ch) == '4' || (ch) == '5' || (ch) == '6' || (ch) == '7' || (ch) == '8' || (ch) == '9' || (ch) == '0')
-
 
 namespace frost {
 
@@ -138,7 +136,6 @@ namespace frost {
 
     parse_result http_request::parse() {
         // TODO: if this requests a keep-alive connection check for _KEEP_ALIVE_COUNT < _KEEP_ALIVE_MAX
-        // TODO: it is better to reuse buffer than to recreate it constantly
 
         while (true) {
             if (_rbuf_ptr == (_rbuf + _ruse) && _parse_state != parse_state::BODY) {
@@ -155,7 +152,6 @@ namespace frost {
                     if (_ruse == 0) {
                         return parse_result::NEED_MORE;
                     } else {
-//                        RECREATE(_work_buf, _work_buf_len, 10, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::METHOD;
                         continue;
@@ -174,8 +170,8 @@ namespace frost {
                         #ifdef ALLOW_PRINT
                         printf("method: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
+                        _method = http_method_assist::from_str(std::string(_work_buf, _work_buf_use));
                         _work_buf_use = 0;
-//                        RECREATE(_work_buf, _work_buf_len, path_max_size, _work_buf_use);
                         _parse_state = parse_state::PATH;
                     }
                     ++_rbuf_ptr;
@@ -195,8 +191,7 @@ namespace frost {
                         #ifdef ALLOW_PRINT
                         printf("path: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-                        _path = std::string(_work_buf, _work_buf_use + 1);
-//                        CLEAN(_work_buf, _work_buf_len, _work_buf_use);
+                        _path = std::string(_work_buf, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::PROTOCOL;
                     }
@@ -253,7 +248,6 @@ namespace frost {
                     if (ch != '/') {
                         return parse_result::BAD;
                     } else {
-//                        RECREATE(_work_buf, _work_buf_len, 1, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::PROTOCOL_MAJOR;
                     }
@@ -267,8 +261,7 @@ namespace frost {
                         _work_buf[_work_buf_use++] = ch;
                     } else {
                         if (ch == '.') {
-                            _version.set_major_ver(frost::atoi_positive(_work_buf, _work_buf_use)); // TODO: write own atoi with specifying length
-//                            RECREATE(_work_buf, _work_buf_len, 1, _work_buf_use);
+                            _version.set_major_ver(frost::atoi_positive(_work_buf, _work_buf_use));
                             _work_buf_use = 0;
                             _parse_state = parse_state::PROTOCOL_MINOR;
                         } else {
@@ -285,11 +278,10 @@ namespace frost {
                         _work_buf[_work_buf_use++] = ch;
                     } else {
                         if (ch == '\r') {
-                            _version.set_minor_ver(frost::atoi_positive(_work_buf, _work_buf_use)); // TODO: write own atoi with specifying length
+                            _version.set_minor_ver(frost::atoi_positive(_work_buf, _work_buf_use));
                             #ifdef ALLOW_PRINT
                             printf("version: %s\n", _version.to_string().c_str());
                             #endif
-//                            CLEAN(_work_buf, _work_buf_len, _work_buf_use);
                             _work_buf_use = 0;
                             _parse_state = parse_state::STATUS_LINE_BREAK_R;
                         } else {
@@ -320,7 +312,6 @@ namespace frost {
                         _parse_state = parse_state::PRE_BODY;
                         ++_rbuf_ptr;
                     } else {  // header starts
-//                        RECREATE(_work_buf, _work_buf_len, 20, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_NAME;
                     }
@@ -341,7 +332,6 @@ namespace frost {
                         printf("header_name: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
                         _headers.emplace_back(header(std::string(_work_buf, _work_buf_use)));
-//                        RECREATE(_work_buf, _work_buf_len, 100, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_VALUE;
                     }
@@ -367,7 +357,6 @@ namespace frost {
                         printf("header_value: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
                         _headers.back().set_value(std::string(_work_buf, _work_buf_use));
-//                        CLEAN(_work_buf, _work_buf_len, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_BREAK_R;
                     } else {
@@ -395,7 +384,6 @@ namespace frost {
                         _parse_state = parse_state::PRE_BODY;
                         ++_rbuf_ptr;
                     } else {
-//                        RECREATE(_work_buf, _work_buf_len, 20, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::HEADER_NAME;
                     }
@@ -405,8 +393,6 @@ namespace frost {
                 case parse_state::PRE_BODY: {
                     auto ch = *_rbuf_ptr;
                     if (ch == '\n') {
-//                        CLEAN(_work_buf, _work_buf_len, _work_buf_use);
-//                        RECREATE(_work_buf, _work_buf_len, possible_body_size, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::BODY;
                     } else {

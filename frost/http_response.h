@@ -10,6 +10,7 @@
 #include "util/util.h"
 #include "http/status.h"
 #include "http/header.h"
+#include "http/http_version.h"
 
 namespace frost {
 

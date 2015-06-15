@@ -151,6 +151,7 @@ namespace frost {
                 req->_ruse += nread;
 
                 auto p = req->parse();
+//                auto p = parse_result::GOOD;
                 switch (p) {
                     case parse_result::NEED_MORE: {
                         if (req->_ruse >= req->_rlen) {

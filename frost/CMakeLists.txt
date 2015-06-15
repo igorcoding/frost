@@ -21,6 +21,10 @@ set(SOURCE_FILES
                  http/status.cc
                  http/header.h
                  http/header.cc
+                 http/http_version.h
+                 http/http_version.cc
+                 http/method.h
+                 http/method.cc
 
                  )
 add_library(frost ${SOURCE_FILES})

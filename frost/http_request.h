@@ -4,10 +4,11 @@
 #include "router.h"
 #include "util/util.h"
 #include "http/header.h"
-#include "http_response.h"
+#include "http/http_version.h"
 
 #include <ev++.h>
 #include <vector>
+#include "http/method.h"
 
 namespace frost {
     enum class parse_result {
@@ -36,18 +37,6 @@ namespace frost {
         PRE_BODY,
         BODY,
         BODY_WAIT
-    };
-
-    enum class http_method {
-        NONE,
-        OPTIONS,
-        GET,
-        HEAD,
-        POST,
-        PUT,
-        DELETE,
-        TRACE,
-        CONNECT
     };
 
 
