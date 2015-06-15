@@ -3,6 +3,8 @@
 #include <frost/http_request.h>
 #include <frost/http_server.h>
 
+//#define ALLOW_PRINT 1
+
 using namespace std;
 
 void on_request(frost::http_request* req, frost::http_response* resp) {

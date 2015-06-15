@@ -15,6 +15,7 @@ set(SOURCE_FILES
                  http_response.cc
                  router.h
                  util/util.h
+                 util/util.cc
                  util/mapper.h
                  http/status.h
                  http/status.cc

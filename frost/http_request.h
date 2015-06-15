@@ -16,6 +16,28 @@ namespace frost {
         BAD
     };
 
+    enum class parse_state {
+        BEGIN,
+        METHOD,
+        PATH,
+        PROTOCOL,
+        PROTOCOL_H,
+        PROTOCOL_T1,
+        PROTOCOL_T2,
+        PROTOCOL_P,
+        PROTOCOL_MAJOR,
+        PROTOCOL_MINOR,
+        STATUS_LINE_BREAK_R,
+        STATUS_LINE_BREAK_N,
+        HEADER_NAME,
+        HEADER_VALUE,
+        HEADER_BREAK_R,
+        HEADER_BREAK_N,
+        PRE_BODY,
+        BODY,
+        BODY_WAIT
+    };
+
     enum class http_method {
         NONE,
         OPTIONS,
@@ -68,6 +90,7 @@ namespace frost {
         static uint32_t _rlen;
 
         parse_result _parse_result;
+        parse_state _parse_state;
         http_method _method;
         http_version _version;
         std::string _path;
@@ -81,6 +104,13 @@ namespace frost {
 
         static size_t _KEEP_ALIVE_COUNT;
         static constexpr size_t _KEEP_ALIVE_MAX = 100;  // TODO: this is invalid because of fork
+
+        static size_t path_max_size;
+
+        char* _work_buf;
+        size_t _work_buf_len;
+        size_t _work_buf_use;
+        bool _content_length_await;
     };
 
 

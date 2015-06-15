@@ -103,7 +103,7 @@ namespace frost {
         char* buf = new char[HEADER_BUF_LEN];
         write_header(buf, HEADER_BUF_LEN, "Server", VERSION_STR);
         write_header(buf, HEADER_BUF_LEN, "Content-Length", body_len);
-        write_header(buf, HEADER_BUF_LEN, "Content-Type", "text/plain");
+        write_header(buf, HEADER_BUF_LEN, "Content-Type", "text/html");
         delete[] buf;
         write_raw("\r\n", 2);
         write_raw(body, body_len);

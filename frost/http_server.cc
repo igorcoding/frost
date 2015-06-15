@@ -164,7 +164,7 @@ namespace frost {
                         return;
                     }
                     case parse_result::GOOD: {
-                        // printf("Got request:\n%.*s", req->_ruse, req->_rbuf);
+//                         printf("====\nGot request:\n%.*s\n====\n", req->_ruse, req->_rbuf);
                         auto resp = create_response(req);
                         // auto cb = _router.get_route(req->path());
                         auto cb = _router.get_route("/");

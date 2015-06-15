@@ -10,9 +10,20 @@ namespace frost {
         std::string name;
         std::string value;
 
+        header(const std::string& name)
+                : name(name) { }
+
         header(const std::string& name, const std::string& value)
                 : name(name),
                   value(value) { }
+
+        void set_name(const std::string& name) {
+            this->name = name;
+        }
+
+        void set_value(const std::string& value) {
+            this->value = value;
+        }
 
 //        static int build_header_str(char* buf, size_t buf_len, const header& h);
         template<typename VALUE> static int build_header_str(char* buf, size_t buf_len, const char* name, VALUE value);

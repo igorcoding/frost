@@ -24,9 +24,20 @@ namespace frost {
         int major_ver() const { return _major_ver; }
         int minor_ver() const { return _minor_ver; }
 
+
+        void set_major_ver(int major_ver) {
+            _major_ver = major_ver;
+        }
+
+        void set_minor_ver(int minor_ver) {
+            _minor_ver = minor_ver;
+        }
+
         void clear() {
             _major_ver = 0;
             _minor_ver = 0;
+            delete _ver_str;
+            _ver_str = nullptr;
         }
 
         const std::string& to_string() {
@@ -60,6 +71,9 @@ namespace frost {
 
     template <typename Key, typename T>
     using unordered_map = std::unordered_map<Key, T, HashType<Key>>;
+
+
+    int atoi_positive(char* str, size_t len);
 
 }
 
