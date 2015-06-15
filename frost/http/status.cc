@@ -10,6 +10,7 @@ namespace frost
                     (status_code::BAD_REQUEST, "Bad Request")
                     (status_code::FORBIDDEN, "Forbidden")
                     (status_code::NOT_FOUND, "Not Found")
+                    (status_code::METHOD_NOT_ALLOWED, "Method Not Allowed")
                     (status_code::REQUEST_ENTITY_TOO_LARGE, "Request Entity Too Large")
     ;
 

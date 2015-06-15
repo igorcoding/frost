@@ -28,10 +28,21 @@ void on_request(frost::http_request* req, frost::http_response* resp) {
 int main() {
     frost::http_server* server = new frost::http_server(8000);
     server->on("/", [](frost::http_request* req, frost::http_response* resp) {
-//        resp->write_status(frost::status_code::OK);
-        char msg[] = "Hello from server!\r\n";
-        resp->write(frost::status_code::OK, msg, 0);
-        // resp->write_raw(frost::status_code::OK, "Hello from server!", 18);
+
+        switch (req->method()) {
+            case frost::http_method::GET: {
+                char msg[] = "Hello there! Requested via GET.";
+                resp->write(frost::status_code::OK, msg, 0);
+            }
+            case frost::http_method::POST: {
+                char msg[] = "Hello there! Requested via POST.";
+                resp->write(frost::status_code::OK, msg, 0);
+            };
+            default: {
+                char msg[] = "Hello there! Requested via uknown method.";
+                resp->write(frost::status_code::METHOD_NOT_ALLOWED, msg, 0);
+            }
+        }
         resp->finish();
     });
 

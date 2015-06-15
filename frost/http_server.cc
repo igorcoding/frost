@@ -145,7 +145,7 @@ namespace frost {
         w.stop();
         req->_tw.stop();
 
-        do {
+        again:
             ssize_t nread = ::recv(w.fd, req->_rbuf + req->_ruse, req->_rlen - req->_ruse, 0);
             if (nread > 0) {
                 req->_ruse += nread;
@@ -199,7 +199,7 @@ namespace frost {
                     case EAGAIN:
                         return;
                     case EINTR:
-                        continue;
+                        goto again;
                     default:
                         perror("read error");
                         delete req;
@@ -210,7 +210,6 @@ namespace frost {
                 delete resp;
                 delete req;
             }
-        } while (0);
     }
 
     void http_server::write_cb(ev::io& w, int revents) {
@@ -223,7 +222,7 @@ namespace frost {
         w.stop();
         resp->_tw.stop();
 
-        do {
+        again:
             ssize_t written = ::writev(resp->_client_fd, resp->_wbuf, resp->_wuse);
 
             if (written > -1) {
@@ -271,7 +270,7 @@ namespace frost {
                     case EAGAIN:
                         break;
                     case EINTR:
-                        continue;
+                        goto again;
                     default:
                         perror("write error");
                         delete resp;
@@ -279,7 +278,6 @@ namespace frost {
                 }
                 return;
             }
-        } while(0);
     }
 
     void http_server::read_timeout_cb(ev::timer& w, int revents) {

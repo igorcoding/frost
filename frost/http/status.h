@@ -13,7 +13,8 @@ namespace frost
         BAD_REQUEST = 400,
         FORBIDDEN = 403,
         NOT_FOUND = 404,
-        REQUEST_ENTITY_TOO_LARGE = 413
+        METHOD_NOT_ALLOWED = 405,
+        REQUEST_ENTITY_TOO_LARGE = 413,
     };
 
     struct status_code_assist

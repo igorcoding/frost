@@ -85,15 +85,24 @@ namespace frost {
     void http_response::write_status(status_code code, http_version& version) {
         auto& code_str = status_code_assist::desc(code);
         auto& ver_str = version.to_string();
-        size_t buf_len = 30;
-        char* buf = new char[buf_len];
-        int len = snprintf(buf, buf_len, "%s %d %.*s\r\n", ver_str.c_str(), (int) code, (int) code_str.length(), code_str.c_str());
-        if (len < 0) {
-            perror("[http_response::write_status]: snprintf failed");
-        } else {
-            write_raw(buf, static_cast<size_t>(len));
-        }
-        delete[] buf;
+        size_t buf_len = 100;
+        char* buf = (char*) calloc(sizeof(char), buf_len);
+
+        again:
+            int len = snprintf(buf, buf_len, "%s %d %.*s\r\n", ver_str.c_str(), (int) code, (int) code_str.length(),
+                               code_str.c_str());
+            if (len < 0) {
+                perror("[http_response::write_status]: snprintf failed");
+            } else {
+                auto len_s = (size_t) len;
+                if (len_s > buf_len) {
+                    buf_len = len_s;
+                    buf = (char*) realloc(buf, buf_len);
+                    goto again;
+                }
+                write_raw(buf, static_cast<size_t>(std::min(len, (int) buf_len)));
+            }
+        free(buf);
     }
 
     void http_response::write(status_code code, const char* body, size_t body_len) {
