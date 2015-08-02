@@ -23,13 +23,14 @@ namespace frost
         static const std::string& desc(status_code s) {
             auto i = _desc.find(s);
             if (i == _desc.end()) {
-                throw "error";
+                return _empty;
             } else {
                 return i->second;
             }
         }
 
     private:
+        static const std::string _empty;
         static frost::unordered_map<status_code, std::string> _desc;
     };
 }

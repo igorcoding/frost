@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string>
+#include <string.h>
 
 namespace frost {
 
@@ -14,9 +15,9 @@ namespace frost {
 
         header(const char* const name, size_t name_len, const char* const value, size_t value_len)
                 : name(name),
-                  name_len(name_len),
+                  name_len(name_len == 0 ? strlen(name) : name_len),
                   value(value),
-                  value_len(value_len) { }
+                  value_len(value_len == 0 ? strlen(value) : value_len) { }
 
 
 

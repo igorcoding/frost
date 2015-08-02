@@ -4,6 +4,8 @@
 namespace frost
 {
 
+    const std::string status_code_assist::_empty = "";
+
     frost::unordered_map<status_code, std::string> status_code_assist::_desc
                                 = mapper<status_code, std::string>()
                     (status_code::OK, "OK")

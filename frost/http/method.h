@@ -20,8 +20,8 @@ namespace frost {
     struct http_method_assist
     {
     public:
-        static http_method from_str(const std::string& m) {
-            auto i = _desc.find(m);
+        static http_method from_str(const char* str, size_t len) {
+            auto i = _desc.find(std::make_pair(str, len));
             if (i == _desc.end()) {
                 return http_method::NONE;
             } else {
@@ -30,7 +30,7 @@ namespace frost {
         }
 
     private:
-        static frost::unordered_map<std::string, http_method> _desc;
+        static cstr_map_t<http_method> _desc;
     };
 }
 

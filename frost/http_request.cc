@@ -161,7 +161,7 @@ namespace frost {
                         #ifdef ALLOW_PRINT
                         printf("method: %.*s\n", (int) _work_buf_use, _work_buf);
                         #endif
-//                        _method = http_method_assist::from_str(std::string(_work_buf, _work_buf_use));
+                        _method = http_method_assist::from_str(_rbuf_ptr - _work_buf_use, _work_buf_use);
                         _work_buf_use = 0;
                         _parse_state = parse_state::PATH;
                     }
