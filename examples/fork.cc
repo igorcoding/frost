@@ -8,10 +8,10 @@ using namespace std;
 
 int main() {
     frost::http_server* server = new frost::http_server(8000);
-    server->on("/", [](frost::http_request* req, frost::http_response* resp) {
+    server->on("/", [](frost::http_request& req, frost::http_response& resp) {
         char msg[] = "Hello from server!\r\n";
-        resp->write(frost::status_code::OK, msg, 0);
-        resp->finish();
+        resp.write(frost::status_code::OK, msg, 0);
+        resp.finish();
     });
 
     server->on_signal(SIGINT, [server]() {
@@ -29,7 +29,6 @@ int main() {
             std::cout << "Forked child with pid: " << pid << std::endl;
         } else if (pid == 0) {
             // child
-            server->notify_fork_child();
             server->accept();
             break;
         } else {
