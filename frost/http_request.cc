@@ -1,11 +1,9 @@
+#include <util.h>
 #include "http_request.h"
 #include "http_response.h"
+#include "http_server.h"
 #include "util/util.h"
 
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <iostream>
-#include <unistd.h>
 
 #define RECREATE(buf, buf_len, buf_len_value, buf_use) do {\
     free(buf);\
@@ -24,24 +22,12 @@
 
 
 namespace frost {
-
-    uint32_t http_request::_rlen = 4096;
-    size_t http_request::_KEEP_ALIVE_COUNT = 0;
     size_t http_request::path_max_size = 100;
 
-    void http_request::set_max_buffer_size(uint32_t max_buffer) {
-        _rlen = max_buffer;
-    }
 
-
-
-    http_request::http_request(int client_fd)
-        : _rw(),
-          _tw(),
-          _client_fd(client_fd),
-          _rbuf(nullptr),
-          _ruse(0),
-          _rbuf_ptr(_rbuf),
+    http_request::http_request(http_server& srv, evsrv_conn_info* info)
+        : ev::srv_conn(static_cast<ev::srv&>(srv), info),
+          _rbuf_ptr(rbuf()),
 
           _parse_result(parse_result::NEED_MORE),
           _parse_state(parse_state::BEGIN),
@@ -53,57 +39,17 @@ namespace frost {
           _body_ptr(nullptr),
           _body_size(0),
 
-          _keep_alive(false),
           __resp(nullptr),
 
           _work_buf_use(0),
           _content_length_coming(false) {
-        _rbuf = new char[_rlen];
-        _rbuf_ptr = _rbuf;
-        ::fcntl(_client_fd, F_SETFL, ::fcntl(_client_fd, F_GETFL, 0) | O_NONBLOCK);
-        _rw.set(_client_fd, ev::READ);
-        _tw.set(5.0, 0);
     }
 
     http_request::~http_request() {
-        if (_keep_alive) {
-            --_KEEP_ALIVE_COUNT;
-        }
-        delete[] _rbuf;
-        _rbuf = nullptr;
-
-        stop();
+        clean();
     }
 
-    void http_request::start() {
-        _rw.start();
-        _tw.start();
-    }
-
-    void http_request::start_keep_alive() {
-        _rw.start();
-        _keep_alive_w.set(10.0, 0);
-        _keep_alive_w.start();
-    }
-
-    void http_request::stop() {
-        if (_tw.is_active()) {
-            _tw.stop();
-        }
-        if (_keep_alive_w.is_active()) {
-            _keep_alive_w.stop();
-        }
-        if (_rw.is_active()) {
-            _rw.stop();
-        }
-        if (_client_fd > -1) {
-//            printf("closing socket\n");
-            ::close(_client_fd);
-            _client_fd = -1;
-        }
-    }
-
-    void http_request::clear() {
+    void http_request::clean() {
         _parse_result = parse_result::NEED_MORE;
         _method = http_method::NONE;
         _version.clear();
@@ -113,11 +59,7 @@ namespace frost {
         _body_ptr = nullptr;
         _body_size = 0;
 
-        delete[] _rbuf;
-        _rbuf = new char[_rlen];
-        _rbuf_ptr = _rbuf;
-        _ruse = 0;
-
+        delete __resp;
         __resp = nullptr;
     }
 
@@ -130,25 +72,25 @@ namespace frost {
     }
 
     parse_result http_request::parse() {
-        // TODO: if this requests a keep-alive connection check for _KEEP_ALIVE_COUNT < _KEEP_ALIVE_MAX
+        if (_rbuf_ptr == nullptr) {
+            _rbuf_ptr = rbuf();
+        }
 
         while (true) {
-            if (_rbuf_ptr == (_rbuf + _ruse) && _parse_state != parse_state::BODY) {
+            if (_rbuf_ptr == (rbuf() + ruse()) && _parse_state != parse_state::BODY) {
                 return parse_result::NEED_MORE;
             }
 
             switch (_parse_state) {
 
                 case parse_state::BEGIN: {
-                    if (_ruse == 0) {
+                    if (ruse() == 0) {
                         return parse_result::NEED_MORE;
                     } else {
                         _work_buf_use = 0;
                         _parse_state = parse_state::METHOD;
                         continue;
                     }
-
-                    break;
                 }
                 case parse_state::METHOD: {
                     auto ch = *_rbuf_ptr;
@@ -167,8 +109,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-
-                    break;
                 }
                 case parse_state::PATH: {
                     auto ch = *_rbuf_ptr;
@@ -189,7 +129,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL: {
                     auto ch = *_rbuf_ptr;
@@ -200,7 +139,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_H: {
                     auto ch = *_rbuf_ptr;
@@ -211,7 +149,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_T1: {
                     auto ch = *_rbuf_ptr;
@@ -222,7 +159,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_T2: {
                     auto ch = *_rbuf_ptr;
@@ -233,7 +169,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_P: {
                     auto ch = *_rbuf_ptr;
@@ -245,7 +180,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_MAJOR: {
                     auto ch = *_rbuf_ptr;
@@ -262,7 +196,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::PROTOCOL_MINOR: {
                     auto ch = *_rbuf_ptr;
@@ -282,7 +215,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::STATUS_LINE_BREAK_R: {
                     auto ch = *_rbuf_ptr;
@@ -293,7 +225,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::STATUS_LINE_BREAK_N: { // TODO: rethink about ++_rbuf_ptr;
                     auto ch = *_rbuf_ptr;
@@ -308,7 +239,6 @@ namespace frost {
                         _parse_state = parse_state::HEADER_NAME;
                     }
                     continue;
-                    break;
                 }
                 case parse_state::HEADER_NAME: {
                     auto ch = *_rbuf_ptr;
@@ -330,7 +260,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::HEADER_VALUE: {
                     auto ch = *_rbuf_ptr;
@@ -360,8 +289,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-
-                    break;
                 }
                 case parse_state::HEADER_BREAK_R: {
                     auto ch = *_rbuf_ptr;
@@ -372,7 +299,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::HEADER_BREAK_N: { // TODO: rethink about ++_rbuf_ptr;
                     auto ch = *_rbuf_ptr;
@@ -384,7 +310,6 @@ namespace frost {
                         _parse_state = parse_state::HEADER_NAME;
                     }
                     continue;
-                    break;
                 }
                 case parse_state::PRE_BODY: {
                     auto ch = *_rbuf_ptr;
@@ -396,7 +321,6 @@ namespace frost {
                     }
                     ++_rbuf_ptr;
                     continue;
-                    break;
                 }
                 case parse_state::BODY: {
                     if (_body_size == 0) {
@@ -407,7 +331,6 @@ namespace frost {
                         _parse_state = parse_state::BODY_WAIT;
                     }
                     continue;
-                    break;
                 }
                 case parse_state::BODY_WAIT: {
                     if (_body_size == 0) {
@@ -416,7 +339,7 @@ namespace frost {
                         #endif
                         return parse_result::GOOD;
                     } else {
-                        auto possible_body_size = _rbuf + _ruse - _rbuf_ptr;
+                        auto possible_body_size = rbuf() + ruse() - _rbuf_ptr;
                         _rbuf_ptr += possible_body_size;
                         auto s = _rbuf_ptr - _body_ptr;
                         if (s == _body_size) {
@@ -424,13 +347,12 @@ namespace frost {
                             printf("body: %.*s\n", _body_size, _body_ptr);
                             #endif
                             return parse_result::GOOD;
-                        } else if (_rbuf_ptr == (_rbuf + _ruse)) {
+                        } else if (_rbuf_ptr == (rbuf() + ruse())) {
                             return parse_result::NEED_MORE;
                         } else {
                             return parse_result::BAD;
                         }
                     }
-                    break;
                 }
             }
         }

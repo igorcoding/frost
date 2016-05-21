@@ -6,56 +6,77 @@
 #include <functional>
 #include <unordered_map>
 #include <string.h>
+#include <util.h>
 
+#include "http_request.h"
 #include "util/util.h"
 #include "http/status.h"
 #include "http/header.h"
 #include "http/http_version.h"
 
+
 namespace frost {
 
+    struct buffer {
+        char* buf;
+        size_t len;
+        size_t use;
 
 
+        buffer(size_t buf_len)
+            : buf((char*) malloc(sizeof(char) * buf_len)),
+              len(buf_len),
+              use(0)
+        { }
 
-    class http_request;
+        ~buffer() {
+            free(buf);
+        }
+
+        char* current() const {
+            return buf + use;
+        }
+
+        ssize_t left() const {
+            return len - use;
+        }
+
+        void grow() {
+            len <<= 1;
+            buf = (char*) realloc(buf, len);
+        }
+
+        void add_new_line() {
+            if (unlikely(left() < 2)) {
+                grow();
+            }
+            buf[use++] = '\r';
+            buf[use++] = '\n';
+        }
+    };
+
     class http_response {
         friend class http_server;
     public:
         static http_version DEFAULT_VERSION;
 
-        http_response(int& client_fd, http_request* req);
         ~http_response();
 
         bool finished();
 
-        void write_raw(const char* buf, size_t len);
-        void write_status(status_code code);
-        void write_status(status_code code, http_version& version);
-        template <typename VALUE> bool write_header(const char* name, VALUE value);
+        void write_raw(const void* buf, size_t len);
 
-        void write(status_code code, const char* body, size_t body_len);
+        void write(status_code code, const void* body, size_t body_len);
 
         void finish();
 
     private:
-        void start();
-        template <typename VALUE> bool write_header(char* buf, size_t buf_len, const char* name, VALUE value);
-
-        void stop();
+        http_response(http_request& req);
+        int write_status(buffer& b, status_code code);
+        template <typename VALUE> int write_header(buffer& b, const char* name, VALUE value);
     private:
-        ev::io _ww;
-        ev::timer _tw;
-
-        int& _client_fd;
-
-        http_request* _req;
-        iovec* _wbuf;
-        uint32_t _wuse;
-        uint32_t _wlen;
-
+        http_request& _req;
         bool _finished;
-
-        static constexpr size_t HEADER_BUF_LEN = 50;
     };
 
 
@@ -64,32 +85,25 @@ namespace frost {
     }
 
     template <typename VALUE> inline
-    bool http_response::write_header(const char* name, VALUE value) {
-        char* buf = new char[HEADER_BUF_LEN];
-        bool status = write_header(buf, HEADER_BUF_LEN, name, value);
-        delete[] buf;
-        return status;
-    }
-
-    template <typename VALUE> inline
-    bool http_response::write_header(char* buf, size_t buf_len, const char* name, VALUE value) {
-        int len = header::build_header_str(buf, buf_len, name, value);
+    int http_response::write_header(buffer& b, const char* name, VALUE value) {
+        again:
+        int len = header::build_header_str(b.current(), b.len, name, value);
         if (len < 0) {
             perror("Error in snprintf");
-            return false;
+            return len;
         } else {
-            write_raw(buf, static_cast<size_t>(len));
-            return true;
+            if (len > b.left()) {
+                b.grow();
+                goto again;
+            }
+            b.use += len;
+            return len;
         }
     }
 
     inline void http_response::finish() {
         _finished = true;
-//        if (!_ww.is_active()) {
-//            auto req = _req;
-//            delete this;
-//            delete req;
-//        }
+        _req.ruse() = 0;
     }
 }
 

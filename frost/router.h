@@ -20,7 +20,7 @@ namespace frost {
 
     class http_request;
     class http_response;
-    typedef std::function<void(http_request*, http_response*)> cb_t;
+    typedef std::function<void(http_request&, http_response&)> cb_t;
     typedef router<cb_t> path_router_t;
 
     template <typename C> inline

@@ -12,5 +12,8 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
+include_directories(third_party/libevserver/include/)
+
+add_subdirectory(third_party/libevserver/)
 add_subdirectory(frost/)
 add_subdirectory(examples/)

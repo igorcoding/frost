@@ -28,4 +28,4 @@ set(SOURCE_FILES
 
                  )
 add_library(frost ${SOURCE_FILES})
-target_link_libraries(frost ev)
+target_link_libraries(frost ev evserver)
